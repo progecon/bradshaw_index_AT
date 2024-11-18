@@ -1,0 +1,29 @@
+---
+title: "PROJECT NAME - Plots"
+author: "Ludwig List"
+date: '`r Sys.Date()`'
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-link: true
+    embed-resources: true
+    self-contained-math: true
+editor: source
+toc: true
+toc_depth: 2
+number-sections: true
+---
+
+```{r setup, include=FALSE}
+# Clear memory
+rm(list = ls(all = TRUE))
+
+# Load libraries
+library(here)
+
+
+
+set.seed(5877)
+
+```

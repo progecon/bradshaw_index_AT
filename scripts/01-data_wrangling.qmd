@@ -1,0 +1,47 @@
+---
+title: "Project Name - Raw data quality check"
+author: "Ludwig List"
+date: '`r Sys.Date()`'
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-link: true
+    embed-resources: true
+    self-contained-math: true
+    
+editor: source
+toc: true
+toc_depth: 2
+number-sections: true
+
+---
+
+```{r setup, message = FALSE}
+# Load libraries
+library(here)
+library(sjPlot)
+library(DT)
+library(haven)
+library(surveytoolbox) # install with devtools::install_github("martinctc/surveytoolbox")
+library(tidyverse)
+library(sjlabelled)
+library(knitr)
+library(ggplot2)
+
+set.seed(5877)
+```
+
+```{r load custom functions, message = FALSE}
+# Load custom functions
+source(here("scripts/functions/custom_functions.R"))
+```
+
+```{r load study-specific data, message = FALSE}
+wave_1 <- haven::read_sav(here("data/"))
+survey_firm <- ""
+
+```
+
+# Introduction {#sec-intro}
+

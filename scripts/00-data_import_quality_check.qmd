@@ -1,0 +1,178 @@
+---
+title: "Project Name - Raw data import & quality check"
+author: "Ludwig List"
+date: '`r Sys.Date()`'
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-link: true
+    embed-resources: true
+    self-contained-math: true
+    
+editor: source
+toc: true
+toc_depth: 2
+number-sections: true
+
+---
+
+```{r setup, message = FALSE}
+# Load libraries
+library(here)
+library(sjPlot)
+library(DT)
+library(haven)
+library(surveytoolbox) # install with devtools::install_github("martinctc/surveytoolbox")
+library(tidyverse)
+library(sjlabelled)
+library(knitr)
+library(ggplot2)
+
+set.seed(5877)
+```
+
+```{r load custom functions, message = FALSE}
+# Load custom functions
+source(here("scripts/functions/custom_functions.R"))
+```
+
+```{r load study-specific data, message = FALSE}
+df <- haven::read_sav(here("data/"))
+survey_firm <- "" # For example "IPSOS"
+fes_office <- "FES XXX" # for example "FES Madrid"
+survey_time <- "Month Day" # for example "December 2024"
+raw_data_file_type <- "" # for example "SPSS"
+```
+
+# Introduction {#sec-intro}
+
+`r fes_office` asked me to work together with them on a new survey wave the want to conduct in `r survey_time`. The research question is currently not defined, but the overall goal is to get an idea about the Spanish extreme right. In order to better understand the team's needs, I conduct this small analysis of the already existing survey data. All Analysis is done using R and RStudio. The data is stored in a `r raw_data_file_type` file and was provided by the survey firm `r survey_firm`. 
+
+# Data Analysis {#sec-data-analysis}
+
+## Data Overview using the `Skimr` package {#sec-data-overview}
+
+
+
+`r format_unique_classes(df)`
+
+The data set contains *`r nrow(df)`* observations and *`r ncol(df)`* variables in *`r n_distinct(df$prov)`* provinces. A general overview of the dataset's variables and values, combined with their respective unweighted and weighted frequencies can be found in @sec-overview-vars.
+
+For a more thorough analysis, I will use the `Skimr` R package to get an overview of the data. This will give me an idea of the data structure and how well `r survey_firm` was doing their work. You can find the respective output in @sec-skimr-data-analysis.
+
+
+## Asessing the data quality of the survey {#sec-data-quality}
+
+### The length of the interviews {#sec-interview-length}
+
+Time within a survey is a necessary measure of quality. While it is important that surveys are an appropriate length, they are designed to take a certain amount of time if done correctly. For example, the first quality check in the time category is if a respondent took more than ten times the median time to complete the survey. The second quality check is to look for speeders. Speeders are respondents who take less than the cutoff time (for example, median length of survey/3) to complete the survey. For example, if the median length of the survey is 15 minutes and a respondent took less than 5 minutes to complete the survey, they could be considered a speeder.
+
+```{r} 
+#add analysis here
+
+```
+
+### Inconsistencies between respondent's answers {#sec-inconsistencies}
+
+This can be simple as checking enumerators with high number of impossible responses (demographic inconsistencies)
+
+For example,
+
+- A case whereby the head of household is 28 years with 15 children.
+- A case whereby the respondent’s education level is college, but in other question is captured as illiterate.
+- A case whereby the respondent has been employed for 25 years or is recorded as retired, when their actual is below 25 years.
+
+More related cases can easily be identified and tracked to flag repondents fabricating data.
+
+If there are combinations that are not possible, the correponding respondents should be ignored for your analysis - and `r survey_firm` should be contacted to get more information on why these inconsistencies are present. 
+
+```{r check for inconsistencies - comunidad autonoma and province, message = FALSE}
+df |>
+  group_by(ccaa, prov) |>
+  summarise(n = n(), .groups = 'drop') |>
+  mutate(prov = as_label(prov), ccaa = as_label(ccaa)) |>
+  select(ccaa, prov, n) |>
+  kable()
+```
+
+Similar checks can be done for other variables, for example for the question of current working status (`ocu`) and in what kind of branch the respondent is working **right now** (`ocu2`) - there should be no unemployed respondent working in a specific branch. Here, it seems that there are lots of currently retired or unemployed respondents working in a specific branch. This implies that either the respondents misunderstood the question and replied with their last job, or that the data was not collected correctly. In any case, this is something that `r survey_firm` should have checked beforehand.
+
+```{r check for inconsistencies - working status and specific branch, message = FALSE}
+df |>
+  group_by(ocu, ocu2) |>
+  summarise(n = n(), .groups = 'drop') |>
+  mutate(ocu2 = as_label(ocu2), 
+         ocu = as_label(ocu)) |>
+  select(ocu, ocu2, n) |>
+  kable()
+```
+
+### Checking the quality check questions {#sec-quality-check-questions}
+
+Many surveys include quality check questions. Quality check questions test the respondent's attention, for example via asking the respondent to select a specific item. For such cases, one can track these quality check questions to flag instances where the responses deviate from the expectations (which could indicate inattentiveness). Typicall, the survey firm at hand would then use this as indicator to check whether they already reached the target number of attentive respondents.
+
+In our case, there seem to be no quality check questions.
+
+
+### Number of outliers {#sec-outliers}
+
+Outliers are data points which differ significantly from other observations. These should be checked and tracked for each enumerator. Enumerators with high number of outliers might need to be retrained or might be an indication of data fraud – which can further be cross-checked and addressed. In our case, you can check this by looking at the variable overview located in @sec-overview-vars and compare for example the mean with the median of the variables, the 0th and 100th percentile, or the standard deviation.
+
+
+```{r check for outliers - 1, message = FALSE}
+df$flatline <- apply(df, 1, function(row) all(row==row[1]))
+df |> 
+  group_by(flatline) |>
+  summarise(N=n())
+```
+Another way is to check how many questions were answered in the same way by respondent. This can be done by calculating the share of equal responses for each respondent. Ordering these by share of equal responses then allows to quickly identify and exclude potential flatliners. This can be an indicator of inattentiveness or data fabrication.
+
+```{r check for outliers - 2, message = FALSE}
+# Step 1: Ensure you're working with numeric columns
+numeric_cols <- df[, sapply(df, is.numeric)]
+
+# Step 2: Calculate the share of equal responses for each respondent
+df$equal_response_share <- apply(numeric_cols, 1, function(row) {
+  # Calculate the proportion of responses equal to the first one
+  round(
+    sum(row == row[1], na.rm = TRUE) / length(na.omit(row))*100,
+  digits = 2)
+})
+
+# Step 3: Order the data frame by the share of equal responses
+df_ordered <- df[order(-df$equal_response_share), ]
+# Step 4: View the result
+head(df_ordered[, c("ID", "equal_response_share")])  # Adjust column names as needed
+```
+In our case, it seems as if IDs number `r df_ordered$ID[1:4]` could be flatliners, as they have the highest percentage share of equal responses (`r df_ordered$equal_response_share[1:4]`). This could be an indicator of inattentiveness or data fabrication.  
+
+# Annex {#sec-annex}
+
+## Overview of Variables {#sec-overview-vars}
+
+```{r overview vars, message = FALSE}
+#| column: screen
+# Create an overview list of all variables, its labels, values and value labels
+df |>
+    sjPlot::view_df(,
+                    weight.by = ponde,
+                    show.type = T,
+                    show.frq = T,
+                    show.prc = T,
+                    show.wtd.frq = T,
+                    show.wtd.prc = T,
+                    max.len = 1000,
+                    wrap.labels = 50,
+                    file = here("output/reports/codebook_df.html") ## change file output
+                    )
+```
+
+## Data Analysis using the `Skimr` package {#sec-skimr-data-analysis}
+
+```{r skimr data analysis, message = FALSE}
+df_skimmed <- df |>
+    skimr::skim()
+
+df_skimmed
+```
